@@ -1,0 +1,27 @@
+[package]
+name = "genoise"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.65.0"
+authors = ["Benoît CORTIER <bcortier@proton.me>"]
+repository = "https://github.com/CBenoit/genoise/"
+documentation = "https://docs.rs/genoise"
+description = "Minimum viable generators on stable Rust implemented by abusing async/await"
+license = "MIT OR Apache-2.0 OR Zlib"
+readme = "README.md"
+include = ["src/**/*", "README.md", "CHANGELOG.md", "LICENSE-*"]
+keywords = ["generator", "yield", "coroutine", "state-machine", "no-std"]
+categories = ["rust-patterns", "no-std"]
+publish = true
+
+[features]
+default = ["alloc"]
+alloc = []
+
+[package.metadata.docs.rs]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
+all-features = true
+
+[[example]]
+name = "demo"
+doc-scrape-examples = true
