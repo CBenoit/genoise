@@ -41,7 +41,9 @@ fn main() {
         assert!(!g.started());
         assert!(matches!(g.start(), GnState::Suspended(())));
         assert!(g.started());
+        borrow_stacked_generator(&g);
         assert!(matches!(g.resume(()), GnState::Completed("hello")));
+        consume_stacked_generator(g);
     }
 
     {
@@ -53,6 +55,16 @@ fn main() {
         assert!(!g.started());
         assert!(matches!(g.start(), GnState::Suspended(())));
         assert!(g.started());
+        borrow_stacked_generator(&g);
         assert!(matches!(g.resume(()), GnState::Completed("hello")));
+        consume_stacked_generator(g);
     }
+}
+
+fn borrow_stacked_generator<'gen, 'slot>(g: &local::StackedGn<'gen, 'slot, (), (), &str>) {
+    assert!(g.started());
+}
+
+fn consume_stacked_generator<'gen, 'slot>(g: local::StackedGn<'gen, 'slot, (), (), &str>) {
+    assert!(g.started());
 }

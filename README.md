@@ -88,20 +88,34 @@ assert!(matches!(generator.resume(false), GnState::Completed("12345678")));
 |                             | [`local::StackedGn`] | [`local::Gn`] | [`sync::StackedGn`] | [`sync::Gn`] |
 |-----------------------------|----------------------|---------------|---------------------|--------------|
 | Allocations per instance    | 0                    | 3             | 0                   | 3            |
-| Can be moved                | No                   | Yes           | No                  | Yes          |
+| Can be returned             | No                   | Yes           | No                  | Yes          |
 | Thread-safe (`Sync + Send`) | No                   | No            | Yes                 | yes          |
+
+`local` is used like in thread-"local".
 
 Constructing a heap-flavored generator requires three allocations:
 
 - A memory slot for the yield value
 - A memory slot for the resume value
-- The `Future`-based state machine
+- A memory slot for the `Future`-based state machine
 
-Stack-flavored generators are using values pinned to the stack, and thus can’t be moved around.
+Stack-flavored generators are relying on "[local pinning][local-pinning]" for the underlying
+`Future`, and the memory slots for the yield and resume values are standard `&T` references
+pointing elsewhere, most likely to a local memory region.
+As such, in most cases these generators can’t be returned from functions.
+However, it’s generally not a problem to transfer the ownership as long as the new owner does
+not outlive the memory slots.
+
+[local-pinning]: https://doc.rust-lang.org/std/pin/macro.pin.html
 
 ## Unsafe usages
 
-TODO: document this
+TODO: expand on this
+
+Safety blocks are properly documented.
+
+- noop RawWaker
+- SyncRefCell (~= kind of spinlock but without spinning)
 
 ## Relation with `Iterator`s
 
