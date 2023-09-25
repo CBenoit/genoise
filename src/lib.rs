@@ -36,17 +36,17 @@ pub trait GeneratorFlavor {
     where
         T: ?Sized + 'a;
 
-    type Borrowable<'a, T>: ?Sized
+    type Borrowable<T>: ?Sized
     where
-        T: ?Sized + 'a;
+        T: ?Sized;
 
     type Borrowed<'a, T>: Deref<Target = T> + DerefMut + 'a
     where
         T: ?Sized + 'a;
 
-    fn borrow_mut<'a, 'b, T>(shared: &'a Self::Borrowable<'b, T>) -> Self::Borrowed<'a, T>
+    fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
     where
-        T: ?Sized + 'a + 'b;
+        T: ?Sized + 'a;
 }
 
 /// Future type that resolves to the value passed in by the caller when [`Gn::resume`] is called and
@@ -56,14 +56,12 @@ pub trait GeneratorFlavor {
 pub struct Interrupt<'slot, Y, R, F>
 where
     F: GeneratorFlavor,
-    Y: 'slot,
-    F::Borrowable<'slot, Option<Y>>: 'slot,
-    R: 'slot,
-    F::Borrowable<'slot, Option<R>>: 'slot,
+    F::Borrowable<Option<Y>>: 'slot,
+    F::Borrowable<Option<R>>: 'slot,
 {
     yielded_value: Option<Y>,
-    yield_slot: F::SharedPtr<'slot, F::Borrowable<'slot, Option<Y>>>,
-    resume_slot: F::SharedPtr<'slot, F::Borrowable<'slot, Option<R>>>,
+    yield_slot: F::SharedPtr<'slot, F::Borrowable<Option<Y>>>,
+    resume_slot: F::SharedPtr<'slot, F::Borrowable<Option<R>>>,
 }
 
 impl<'slot, Y, R, F> Future for Interrupt<'slot, Y, R, F>
@@ -94,22 +92,18 @@ where
 pub struct Co<'slot, Y, R, F>
 where
     F: GeneratorFlavor,
-    Y: 'slot,
-    F::Borrowable<'slot, Option<Y>>: 'slot,
-    R: 'slot,
-    F::Borrowable<'slot, Option<R>>: 'slot,
+    F::Borrowable<Option<Y>>: 'slot,
+    F::Borrowable<Option<R>>: 'slot,
 {
-    yield_slot: F::SharedPtr<'slot, F::Borrowable<'slot, Option<Y>>>,
-    resume_slot: F::SharedPtr<'slot, F::Borrowable<'slot, Option<R>>>,
+    yield_slot: F::SharedPtr<'slot, F::Borrowable<Option<Y>>>,
+    resume_slot: F::SharedPtr<'slot, F::Borrowable<Option<R>>>,
 }
 
 impl<'slot, Y, R, F> Co<'slot, Y, R, F>
 where
     F: GeneratorFlavor,
     Y: Unpin + 'slot,
-    F::Borrowable<'slot, Option<Y>>: 'slot,
     R: 'slot,
-    F::Borrowable<'slot, Option<R>>: 'slot,
 {
     /// Suspends the execution of the generator, yielding an intermediate value
     pub fn suspend(&mut self, value: Y) -> Interrupt<'slot, Y, R, F> {
@@ -175,14 +169,12 @@ where
 pub struct Gn<'gen, 'slot, Y, R, O, F>
 where
     O: 'gen,
-    Y: 'slot,
-    F::Borrowable<'slot, Option<Y>>: 'slot,
-    R: 'slot,
-    F::Borrowable<'slot, Option<R>>: 'slot,
+    F::Borrowable<Option<Y>>: 'slot,
+    F::Borrowable<Option<R>>: 'slot,
     F: GeneratorFlavor,
 {
-    yield_slot: F::SharedPtr<'slot, F::Borrowable<'slot, Option<Y>>>,
-    resume_slot: F::SharedPtr<'slot, F::Borrowable<'slot, Option<R>>>,
+    yield_slot: F::SharedPtr<'slot, F::Borrowable<Option<Y>>>,
+    resume_slot: F::SharedPtr<'slot, F::Borrowable<Option<R>>>,
     generator: Pin<F::UniquePtr<'gen, F::Fut<'gen, O>>>,
     started: bool,
 }

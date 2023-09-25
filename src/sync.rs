@@ -42,17 +42,17 @@ mod stacked {
             ptr
         }
 
-        type Borrowable<'a, T> = SyncRefCell<T>
+        type Borrowable<T> = SyncRefCell<T>
         where
-            T: ?Sized + 'a;
+            T: ?Sized;
 
         type Borrowed<'a, T> = SyncRefMut<'a, T>
         where
             T: ?Sized + 'a;
 
-        fn borrow_mut<'a, 'b, T>(shared: &'a Self::Borrowable<'b, T>) -> Self::Borrowed<'a, T>
+        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
         where
-            T: ?Sized + 'a + 'b,
+            T: ?Sized + 'a,
         {
             shared.borrow_mut()
         }
@@ -128,17 +128,17 @@ mod allocated {
             Arc::clone(ptr)
         }
 
-        type Borrowable<'a, T> = SyncRefCell<T>
+        type Borrowable<T> = SyncRefCell<T>
         where
-            T: ?Sized + 'a;
+            T: ?Sized;
 
         type Borrowed<'a, T> = SyncRefMut<'a, T>
         where
             T: ?Sized + 'a;
 
-        fn borrow_mut<'a, 'b, T>(shared: &'a Self::Borrowable<'b, T>) -> Self::Borrowed<'a, T>
+        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
         where
-            T: ?Sized + 'a + 'b,
+            T: ?Sized + 'a,
         {
             shared.borrow_mut()
         }

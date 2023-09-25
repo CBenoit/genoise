@@ -45,17 +45,17 @@ mod stacked {
             ptr
         }
 
-        type Borrowable<'a, T> = RefCell<T>
+        type Borrowable<T> = RefCell<T>
         where
-            T: ?Sized + 'a;
+            T: ?Sized;
 
         type Borrowed<'a, T> = RefMut<'a, T>
         where
             T: ?Sized + 'a;
 
-        fn borrow_mut<'a, 'b, T>(shared: &'a Self::Borrowable<'b, T>) -> Self::Borrowed<'a, T>
+        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
         where
-            T: ?Sized + 'a + 'b,
+            T: ?Sized + 'a,
         {
             shared.borrow_mut()
         }
@@ -131,17 +131,17 @@ mod heap {
             Rc::clone(ptr)
         }
 
-        type Borrowable<'a, T> = RefCell<T>
+        type Borrowable<T> = RefCell<T>
         where
-            T: ?Sized + 'a;
+            T: ?Sized;
 
         type Borrowed<'a, T> = RefMut<'a, T>
         where
             T: ?Sized + 'a;
 
-        fn borrow_mut<'a, 'b, T>(shared: &'a Self::Borrowable<'b, T>) -> Self::Borrowed<'a, T>
+        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
         where
-            T: ?Sized + 'a + 'b,
+            T: ?Sized + 'a,
         {
             shared.borrow_mut()
         }
