@@ -1,4 +1,8 @@
 #![doc = include_str!("../README.md")]
+#![warn(clippy::undocumented_unsafe_blocks)]
+#![warn(clippy::multiple_unsafe_ops_per_block)]
+#![warn(clippy::semicolon_outside_block)]
+// TODO: #![warn(missing_docs)]
 #![no_std]
 
 #[cfg(feature = "alloc")]
@@ -113,6 +117,10 @@ where
             resume_slot: F::share(&self.resume_slot),
         }
     }
+
+    // TODO: write a test to see what happen when a lot of "suspend" are created but not awaited
+    // The expectation is that we can change the order in which values are exchanged, but no value is lost unless
+    // `Interrupt` is not polled at all.
 
     /// Executes another generator until completion, retrieving its return value
     ///
@@ -239,10 +247,8 @@ fn noop_waker() -> Waker {
     );
     const RAW: RawWaker = RawWaker::new(core::ptr::null(), &VTABLE);
 
-    unsafe {
-        // SAFETY: the contract defined RawWaker's and RawWakerVTable's documentation is upheld, see above
-        Waker::from_raw(RAW)
-    }
+    // SAFETY: the contract defined RawWaker's and RawWakerVTable's documentation is upheld, see above
+    unsafe { Waker::from_raw(RAW) }
 }
 
 fn execute_one_step<F: Future + ?Sized>(generator: Pin<&mut F>) -> Option<F::Output> {

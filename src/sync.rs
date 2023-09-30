@@ -204,11 +204,9 @@ mod cell {
             {
                 SyncRefMut {
                     lock: &self.lock,
-                    value: unsafe {
-                        // SAFETY: we ensured above that there are no references pointing to the
-                        // contents of the UnsafeCell using the atomic boolean
-                        &mut *self.cell.get()
-                    },
+                    // SAFETY: we ensured above that there are no references pointing to the
+                    // contents of the UnsafeCell using the atomic boolean
+                    value: unsafe { &mut *self.cell.get() },
                 }
             } else {
                 panic!("already borrowed");
