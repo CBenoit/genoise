@@ -23,5 +23,9 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 all-features = true
 
 [[example]]
-name = "demo"
+name = "state_machine"
+doc-scrape-examples = true
+
+[[example]]
+name = "self_referential_iterator"
 doc-scrape-examples = true
