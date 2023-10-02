@@ -11,8 +11,11 @@ mod stack {
     #[doc(hidden)]
     #[macro_export]
     macro_rules! let_sync_gen {
-        ($gn:ident, $co:ident, $fut_init:block) => {
-            $crate::let_gen!($crate::sync::StackSync, $gn, $co, $fut_init)
+        ($gn:ident, |$co:ident| $fut_init:block) => {
+            $crate::let_gen!($crate::sync::StackSync, $gn, |$co| $fut_init)
+        };
+        ($gn:ident, $fut_init:path) => {
+            $crate::let_gen!($crate::sync::StackSync, $gn, |co| { $fut_init(co) })
         };
     }
 

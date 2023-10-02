@@ -5,7 +5,7 @@ async fn generator<F: GeneratorFlavor>(_: Co<'_, (), (), F>) {}
 #[test]
 fn check_yield_type_is_inferred_local() {
     let _ = || {
-        local::let_gen!(g, co, { generator(co) });
+        local::let_gen!(g, generator);
         g.started();
     };
 }
@@ -13,7 +13,7 @@ fn check_yield_type_is_inferred_local() {
 #[test]
 fn check_resume_type_is_inferred_local() {
     let _ = || {
-        local::let_gen!(g, co, { generator(co) });
+        local::let_gen!(g, generator);
         matches!(g.start(), GnState::Suspended(()));
     };
 }
@@ -21,7 +21,7 @@ fn check_resume_type_is_inferred_local() {
 #[test]
 fn check_return_type_is_inferred_local() {
     let _ = || {
-        local::let_gen!(g, co, { generator(co) });
+        local::let_gen!(g, generator);
         matches!(g.start(), GnState::Suspended(()));
         g.resume(());
     };
@@ -30,7 +30,7 @@ fn check_return_type_is_inferred_local() {
 #[test]
 fn check_yield_type_is_inferred_sync() {
     let _ = || {
-        sync::let_gen!(g, co, { generator(co) });
+        sync::let_gen!(g, generator);
         g.started();
     };
 }
@@ -38,7 +38,7 @@ fn check_yield_type_is_inferred_sync() {
 #[test]
 fn check_resume_type_is_inferred_sync() {
     let _ = || {
-        sync::let_gen!(g, co, { generator(co) });
+        sync::let_gen!(g, generator);
         matches!(g.start(), GnState::Suspended(()));
     };
 }
@@ -46,7 +46,7 @@ fn check_resume_type_is_inferred_sync() {
 #[test]
 fn check_return_type_is_inferred_sync() {
     let _ = || {
-        sync::let_gen!(g, co, { generator(co) });
+        sync::let_gen!(g, generator);
         matches!(g.start(), GnState::Suspended(()));
         g.resume(());
     };

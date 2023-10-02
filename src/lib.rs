@@ -20,7 +20,7 @@ pub mod sync;
 
 #[macro_export]
 macro_rules! let_gen {
-    ($flavor:ty, $gn:ident, $co:ident, $fut_init:block) => {
+    ($flavor:ty, $gn:ident, |$co:ident| $fut_init:block) => {
         let slot = $crate::CellSlot::default();
         let $co = $crate::Co::<_, _, $flavor>::new_stacked(&slot);
         let fut = ::core::pin::pin!($fut_init);
@@ -29,6 +29,9 @@ macro_rules! let_gen {
             &slot,
             fut as ::core::pin::Pin<&mut _>,
         );
+    };
+    ($flavor:ty, $gn:ident, $fut_init:path) => {
+        $crate::len_gen!($flavor, $gn, |co| { $fut_init(co) })
     };
 }
 

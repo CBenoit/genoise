@@ -99,8 +99,8 @@ async fn tls_server_sequence(
 }
 
 fn main() -> Result<(), ()> {
-    local::let_gen!(client_sequence, co, { tls_client_sequence(co) });
-    local::let_gen!(server_sequence, co, { tls_server_sequence(co) });
+    local::let_gen!(client_sequence, tls_client_sequence);
+    local::let_gen!(server_sequence, tls_server_sequence);
 
     let mut client_state = client_sequence.start();
     let _ = server_sequence.start();

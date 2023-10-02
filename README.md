@@ -138,7 +138,7 @@ async fn my_generator<'a>(mut co: StackCo<'_, usize, bool>, input: &'a str) -> &
 
 let argument = "1234567890";
 
-let_gen!(generator, co, { my_generator(co, argument) }); // <- let_gen! helper macro
+let_gen!(generator, |co| { my_generator(co, argument) }); // <- let_gen! helper macro
 
 assert!(matches!(generator.start(), GnState::Suspended(10)));
 assert!(matches!(generator.resume(true), GnState::Suspended(9)));
@@ -170,7 +170,7 @@ let argument = "1234567890";
 
 {
     // Local stack-flavored
-    local::let_gen!(generator, co, { my_generator(co, argument) });
+    local::let_gen!(generator, |co| { my_generator(co, argument) });
     assert!(matches!(generator.start(), GnState::Suspended(10)));
     assert!(matches!(generator.resume(false), GnState::Completed("1234567890")));
 }
@@ -184,7 +184,7 @@ let argument = "1234567890";
 
 {
     // Thread-safe stack-flavored
-    sync::let_gen!(generator, co, { my_generator(co, argument) });
+    sync::let_gen!(generator, |co| { my_generator(co, argument) });
 
     std::thread::scope(|s| {
         s.spawn(|| {
