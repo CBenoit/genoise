@@ -1,93 +1,57 @@
 pub use stacked::*;
 
 mod stacked {
-    use core::{
-        cell::{RefCell, RefMut},
-        future::Future,
-        pin::Pin,
-    };
+    use core::{cell::Cell, future::Future, pin::Pin};
 
-    use crate::GeneratorFlavor;
+    use crate::{GeneratorFlavor, StackFlavor};
 
-    pub struct StackedLocal;
+    pub struct StackLocal;
 
     /// Helper to construct a stacked local generator
     #[doc(hidden)]
     #[macro_export]
-    macro_rules! let_stacked_local_gen {
+    macro_rules! let_local_gen {
         ($gn:ident, $co:ident, $fut_init:block) => {
-            let yield_slot = $crate::local::new_stacked_slot();
-            let resume_slot = $crate::local::new_stacked_slot();
-            let $co = $crate::local::new_stacked_co(&yield_slot, &resume_slot);
-            let fut = ::core::pin::pin!($fut_init);
-            // TODO: check what happen when mutability is not used (warning?)
-            let mut $gn = $crate::local::StackedGn::new(&yield_slot, &resume_slot, fut);
+            $crate::let_gen!($crate::local::StackLocal, $gn, $co, $fut_init)
         };
     }
 
     #[doc(inline)]
-    pub use let_stacked_local_gen as let_stacked_gen;
+    pub use let_local_gen as let_gen;
 
-    impl GeneratorFlavor for StackedLocal {
-        type Fut<'a, T> = dyn Future<Output = T> + 'a
-        where
-            T: 'a;
+    impl GeneratorFlavor for StackLocal {
+        type Fut<'a, T: 'a> = dyn Future<Output = T> + 'a;
 
-        type UniquePtr<'a, T> = &'a mut T
-        where
-            T: ?Sized + 'a;
+        type UniquePtr<'a, T: ?Sized + 'a> = &'a mut T;
 
-        type SharedPtr<'a, T> = &'a T
-        where
-            T: ?Sized + 'a;
+        type SharedPtr<'a, T: ?Sized + 'a> = &'a T;
 
-        fn share<'a, T: ?Sized + 'a>(ptr: &Self::SharedPtr<'a, T>) -> Self::SharedPtr<'a, T> {
-            ptr
+        type Cell<T> = Cell<T>;
+
+        fn new_cell<T>(value: T) -> Self::Cell<T> {
+            Cell::new(value)
         }
 
-        type Borrowable<T> = RefCell<T>
-        where
-            T: ?Sized;
-
-        type Borrowed<'a, T> = RefMut<'a, T>
-        where
-            T: ?Sized + 'a;
-
-        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
-        where
-            T: ?Sized + 'a,
-        {
-            shared.borrow_mut()
+        fn cell_replace<T>(cell: &Self::Cell<T>, other: T) -> T {
+            cell.replace(other)
         }
     }
 
-    pub type StackedCo<'slot, Y, R> = crate::Co<'slot, Y, R, StackedLocal>;
+    impl StackFlavor for StackLocal {}
 
-    pub type StackedGn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, StackedLocal>;
+    pub type StackCellSlot<Y, R> = crate::CellSlot<Y, R, StackLocal>;
 
-    pub fn new_stacked_slot<T>() -> RefCell<Option<T>> {
-        RefCell::new(None)
-    }
+    pub type StackCo<'slot, Y, R> = crate::Co<'slot, Y, R, StackLocal>;
 
-    pub fn new_stacked_co<'slot, Y, R>(
-        yield_slot: &'slot RefCell<Option<Y>>,
-        resume_slot: &'slot RefCell<Option<R>>,
-    ) -> StackedCo<'slot, Y, R> {
-        StackedCo {
-            yield_slot,
-            resume_slot,
-        }
-    }
+    pub type StackGn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, StackLocal>;
 
-    impl<'gen, 'slot, Y, R, O> StackedGn<'gen, 'slot, Y, R, O> {
+    impl<'gen, 'slot, Y, R, O> StackGn<'gen, 'slot, Y, R, O> {
         pub fn new(
-            yield_slot: &'slot RefCell<Option<Y>>,
-            resume_slot: &'slot RefCell<Option<R>>,
+            slot: &'slot StackCellSlot<Y, R>,
             generator: Pin<&'gen mut (dyn Future<Output = O> + 'gen)>,
         ) -> Self {
             Self {
-                yield_slot,
-                resume_slot,
+                slot,
                 generator,
                 started: false,
             }
@@ -102,54 +66,46 @@ pub use self::heap::*;
 mod heap {
     use alloc::boxed::Box;
     use alloc::rc::Rc;
-    use core::cell::{RefCell, RefMut};
+    use core::cell::Cell;
     use core::future::Future;
 
-    use crate::GeneratorFlavor;
+    use crate::{CellSlot, GeneratorFlavor, HeapFlavor};
 
     /// Thread local flavor, for non-`Send + Sync` generators
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub struct HeapLocal;
 
     impl GeneratorFlavor for HeapLocal {
-        type Fut<'a, T> = dyn Future<Output = T> + 'a
-        where
-            T: 'a;
+        type Fut<'a, T: 'a> = dyn Future<Output = T> + 'a;
 
-        type UniquePtr<'a, T> = Box<T>
-        where
-            T: ?Sized + 'a;
+        type UniquePtr<'a, T: ?Sized + 'a> = Box<T>;
 
-        type SharedPtr<'a, T> = Rc<T>
-        where
-            T: ?Sized + 'a;
+        type SharedPtr<'a, T: ?Sized + 'a> = Rc<T>;
 
-        fn share<'a, T>(ptr: &Self::SharedPtr<'a, T>) -> Self::SharedPtr<'a, T>
-        where
-            T: ?Sized + 'a,
-        {
-            Rc::clone(ptr)
+        type Cell<T> = Cell<T>;
+
+        fn new_cell<T>(value: T) -> Self::Cell<T> {
+            Cell::new(value)
         }
 
-        type Borrowable<T> = RefCell<T>
-        where
-            T: ?Sized;
+        fn cell_replace<T>(cell: &Self::Cell<T>, other: T) -> T {
+            cell.replace(other)
+        }
+    }
 
-        type Borrowed<'a, T> = RefMut<'a, T>
-        where
-            T: ?Sized + 'a;
-
-        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
-        where
-            T: ?Sized + 'a,
-        {
-            shared.borrow_mut()
+    impl HeapFlavor for HeapLocal {
+        fn new_shared<'a, T: 'a>(value: T) -> Self::SharedPtr<'a, T> {
+            Rc::new(value)
         }
     }
 
     /// Thread local generator controller
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub type Co<'slot, Y, R> = crate::Co<'slot, Y, R, HeapLocal>;
+
+    /// Thread local generator controller holding items with 'static lifetime only
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub type StaticCo<Y, R> = Co<'static, Y, R>;
 
     /// Thread local generator
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -162,17 +118,13 @@ mod heap {
             Producer: FnOnce(Co<'slot, Y, R>) -> Generator,
             Generator: Future<Output = O> + 'gen,
         {
-            let co = Co {
-                yield_slot: Rc::new(RefCell::new(None)),
-                resume_slot: Rc::new(RefCell::new(None)),
-            };
-
-            Self {
-                yield_slot: Rc::clone(&co.yield_slot),
-                resume_slot: Rc::clone(&co.resume_slot),
-                generator: Box::pin(producer(co)),
-                started: false,
-            }
+            let co = Co::new_heap(CellSlot::default());
+            let slots = Rc::clone(&co.slot);
+            let generator = Box::pin(producer(co));
+            Self::from_parts(slots, generator)
         }
     }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub type StaticGn<Y, R, O> = crate::Gn<'static, 'static, Y, R, O, HeapLocal>;
 }

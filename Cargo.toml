@@ -2,7 +2,7 @@
 name = "genoise"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.65.0"
+rust-version = "1.68.0"
 authors = ["Benoît CORTIER <bcortier@proton.me>"]
 repository = "https://github.com/CBenoit/genoise/"
 documentation = "https://docs.rs/genoise"

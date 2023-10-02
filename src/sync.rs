@@ -1,90 +1,60 @@
-pub use stacked::*;
+pub use stack::*;
 
-mod stacked {
+mod stack {
     use core::{future::Future, pin::Pin};
 
-    use crate::GeneratorFlavor;
+    use crate::{GeneratorFlavor, StackFlavor};
 
-    pub struct StackedSync;
+    pub struct StackSync;
 
     /// Helper to construct a stacked thread-safe generator
     #[doc(hidden)]
     #[macro_export]
-    macro_rules! let_stacked_sync_gen {
+    macro_rules! let_sync_gen {
         ($gn:ident, $co:ident, $fut_init:block) => {
-            let yield_slot = $crate::local::new_stacked_slot();
-            let resume_slot = $crate::local::new_stacked_slot();
-            let $co = $crate::local::new_stacked_co(&yield_slot, &resume_slot);
-            let fut = ::core::pin::pin!($fut_init);
-            let mut $gn = $crate::local::StackedGn::new(&yield_slot, &resume_slot, fut);
+            $crate::let_gen!($crate::sync::StackSync, $gn, $co, $fut_init)
         };
     }
 
     #[doc(inline)]
-    pub use let_stacked_sync_gen as let_stacked_gen;
+    pub use let_sync_gen as let_gen;
 
-    use super::cell::{SyncRefCell, SyncRefMut};
+    use super::cell::SyncRefCell;
 
-    impl GeneratorFlavor for StackedSync {
-        type Fut<'a, T> = dyn Future<Output = T> + Sync + Send + 'a
-        where
-            T: 'a;
+    impl GeneratorFlavor for StackSync {
+        type Fut<'a, T: 'a> = dyn Future<Output = T> + Sync + Send + 'a;
 
-        type UniquePtr<'a, T> = &'a mut T
-        where
-            T: ?Sized + 'a;
+        type UniquePtr<'a, T: ?Sized + 'a> = &'a mut T;
 
-        type SharedPtr<'a, T> = &'a T
-        where
-            T: ?Sized + 'a;
+        type SharedPtr<'a, T: ?Sized + 'a> = &'a T;
 
-        fn share<'a, T: ?Sized + 'a>(ptr: &Self::SharedPtr<'a, T>) -> Self::SharedPtr<'a, T> {
-            ptr
+        type Cell<T> = SyncRefCell<T>;
+
+        fn new_cell<T>(value: T) -> Self::Cell<T> {
+            SyncRefCell::new(value)
         }
 
-        type Borrowable<T> = SyncRefCell<T>
-        where
-            T: ?Sized;
-
-        type Borrowed<'a, T> = SyncRefMut<'a, T>
-        where
-            T: ?Sized + 'a;
-
-        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
-        where
-            T: ?Sized + 'a,
-        {
-            shared.borrow_mut()
+        #[track_caller]
+        fn cell_replace<T>(cell: &Self::Cell<T>, other: T) -> T {
+            cell.replace(other)
         }
     }
 
-    pub type StackedCo<'slot, Y, R> = crate::Co<'slot, Y, R, StackedSync>;
+    impl StackFlavor for StackSync {}
 
-    pub type StackedGn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, StackedSync>;
+    pub type StackCellSlot<Y, R> = crate::CellSlot<Y, R, StackSync>;
 
-    pub fn new_stacked_slot<T>() -> SyncRefCell<Option<T>> {
-        SyncRefCell::new(None)
-    }
+    pub type StackCo<'slot, Y, R> = crate::Co<'slot, Y, R, StackSync>;
 
-    pub fn new_stacked_co<'slot, Y, R>(
-        yield_slot: &'slot SyncRefCell<Option<Y>>,
-        resume_slot: &'slot SyncRefCell<Option<R>>,
-    ) -> StackedCo<'slot, Y, R> {
-        StackedCo {
-            yield_slot,
-            resume_slot,
-        }
-    }
+    pub type StackGn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, StackSync>;
 
-    impl<'gen, 'slot, Y, R, O> StackedGn<'gen, 'slot, Y, R, O> {
+    impl<'gen, 'slot, Y, R, O> StackGn<'gen, 'slot, Y, R, O> {
         pub fn new(
-            yield_slot: &'slot SyncRefCell<Option<Y>>,
-            resume_slot: &'slot SyncRefCell<Option<R>>,
+            slot: &'slot StackCellSlot<Y, R>,
             generator: Pin<&'gen mut (dyn Future<Output = O> + Send + Sync + 'gen)>,
         ) -> Self {
             Self {
-                yield_slot,
-                resume_slot,
+                slot,
                 generator,
                 started: false,
             }
@@ -93,60 +63,53 @@ mod stacked {
 }
 
 #[cfg(feature = "alloc")]
-pub use self::allocated::*;
+pub use self::heap::*;
 
 #[cfg(feature = "alloc")]
-mod allocated {
+mod heap {
     use alloc::boxed::Box;
     use alloc::sync::Arc;
     use core::future::Future;
 
-    use super::cell::{SyncRefCell, SyncRefMut};
-    use crate::GeneratorFlavor;
+    use super::cell::SyncRefCell;
+    use crate::{CellSlot, GeneratorFlavor, HeapFlavor};
 
     /// Thread safe flavor, for `Send + Sync` generators
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub struct HeapSync;
 
     impl GeneratorFlavor for HeapSync {
-        type Fut<'a, T> = dyn Future<Output = T> + Send + Sync + 'a
-        where
-            T: 'a;
+        type Fut<'a, T: 'a> = dyn Future<Output = T> + Send + Sync + 'a;
 
-        type UniquePtr<'a, T> = Box<T>
-        where
-            T: ?Sized + 'a;
+        type UniquePtr<'a, T: ?Sized + 'a> = Box<T>;
 
-        type SharedPtr<'a, T> = Arc<T>
-        where
-            T: ?Sized + 'a;
+        type SharedPtr<'a, T: ?Sized + 'a> = Arc<T>;
 
-        fn share<'a, T>(ptr: &Self::SharedPtr<'a, T>) -> Self::SharedPtr<'a, T>
-        where
-            T: ?Sized + 'a,
-        {
-            Arc::clone(ptr)
+        type Cell<T> = SyncRefCell<T>;
+
+        fn new_cell<T>(value: T) -> Self::Cell<T> {
+            SyncRefCell::new(value)
         }
 
-        type Borrowable<T> = SyncRefCell<T>
-        where
-            T: ?Sized;
+        #[track_caller]
+        fn cell_replace<T>(cell: &Self::Cell<T>, other: T) -> T {
+            cell.replace(other)
+        }
+    }
 
-        type Borrowed<'a, T> = SyncRefMut<'a, T>
-        where
-            T: ?Sized + 'a;
-
-        fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
-        where
-            T: ?Sized + 'a,
-        {
-            shared.borrow_mut()
+    impl HeapFlavor for HeapSync {
+        fn new_shared<'a, T: 'a>(value: T) -> Self::SharedPtr<'a, T> {
+            Arc::new(value)
         }
     }
 
     /// Thread safe generator controller
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub type Co<'slot, Y, R> = crate::Co<'slot, Y, R, HeapSync>;
+
+    /// Thread safe generator controller holding items with 'static lifetime only
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub type StaticCo<Y, R> = Co<'static, Y, R>;
 
     /// Thread safe generator
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -159,28 +122,25 @@ mod allocated {
             Producer: FnOnce(Co<'slot, Y, R>) -> Generator,
             Generator: Future<Output = O> + Send + Sync + 'gen,
         {
-            let co = Co {
-                yield_slot: Arc::new(SyncRefCell::new(None)),
-                resume_slot: Arc::new(SyncRefCell::new(None)),
-            };
-
-            Self {
-                yield_slot: Arc::clone(&co.yield_slot),
-                resume_slot: Arc::clone(&co.resume_slot),
-                generator: Box::pin(producer(co)),
-                started: false,
-            }
+            let co = Co::new_heap(CellSlot::default());
+            let slots = Arc::clone(&co.slot);
+            let generator = Box::pin(producer(co));
+            Self::from_parts(slots, generator)
         }
     }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub type StaticGn<Y, R, O> = crate::Gn<'static, 'static, Y, R, O, HeapSync>;
 }
 
-// Private on purpose
+// NOTE: This module is private on purpose. The `SyncRefCell` type is not part of the public API.
+#[allow(unreachable_pub)]
 mod cell {
     use core::ops::DerefMut;
     use core::sync::atomic::{AtomicBool, Ordering};
     use core::{cell::UnsafeCell, ops::Deref};
 
-    /// Thread safe equivalent of [`RefCell`](core::cell::RefCell)
+    /// Synchronized counterpart to [`RefCell`](core::cell::RefCell)
     pub struct SyncRefCell<T: ?Sized> {
         lock: AtomicBool,
         cell: UnsafeCell<T>,
@@ -195,7 +155,15 @@ mod cell {
         }
     }
 
+    impl<T> SyncRefCell<T> {
+        #[track_caller]
+        pub(crate) fn replace(&self, other: T) -> T {
+            core::mem::replace(&mut *self.borrow_mut(), other)
+        }
+    }
+
     impl<T: ?Sized> SyncRefCell<T> {
+        #[track_caller]
         pub(crate) fn borrow_mut(&self) -> SyncRefMut<'_, T> {
             if self
                 .lock
@@ -204,8 +172,8 @@ mod cell {
             {
                 SyncRefMut {
                     lock: &self.lock,
-                    // SAFETY: we ensured above that there are no references pointing to the
-                    // contents of the UnsafeCell using the atomic boolean
+                    // SAFETY: using the atomic boolean, we ensured above that there are no other
+                    // references pointing to the contents of the UnsafeCell
                     value: unsafe { &mut *self.cell.get() },
                 }
             } else {

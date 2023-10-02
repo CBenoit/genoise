@@ -2,6 +2,7 @@
 #![warn(clippy::undocumented_unsafe_blocks)]
 #![warn(clippy::multiple_unsafe_ops_per_block)]
 #![warn(clippy::semicolon_outside_block)]
+#![warn(unreachable_pub)]
 // TODO: #![warn(missing_docs)]
 #![no_std]
 
@@ -17,76 +18,74 @@ use core::task::{Context, Poll, Waker};
 pub mod local;
 pub mod sync;
 
+#[macro_export]
+macro_rules! let_gen {
+    ($flavor:ty, $gn:ident, $co:ident, $fut_init:block) => {
+        let slot = $crate::CellSlot::default();
+        let $co = $crate::Co::<_, _, $flavor>::new_stacked(&slot);
+        let fut = ::core::pin::pin!($fut_init);
+        // TODO: check what happen when mutability is not used (warning?)
+        let mut $gn = $crate::Gn::<'_, '_, _, _, _, $flavor>::from_parts(
+            &slot,
+            fut as ::core::pin::Pin<&mut _>,
+        );
+    };
+}
+
 /// A generator flavor
 ///
 /// This trait is used to abstract over the inner future to be held by the generator as well as the
 /// pointer families ([`UniquePtr`](Self::UniquePtr) and [`SharedPtr`](Self::SharedPtr)) and interior
-/// mutability types ([`Borrowable`](Self::Borrowable) and [`Borrowed`](Self::Borrowed)) used to
-/// exchange yield and return values internally.
+/// mutability type ([`Cell`](Self::Cell) used to exchange yield and return values internally.
 pub trait GeneratorFlavor {
-    type Fut<'a, T>: ?Sized + Future<Output = T> + 'a
-    where
-        T: 'a;
+    type Fut<'a, T: 'a>: ?Sized + Future<Output = T> + 'a;
 
-    type UniquePtr<'a, T>: Deref<Target = T> + DerefMut + Unpin
-    where
-        T: ?Sized + 'a;
+    type UniquePtr<'a, T: 'a + ?Sized>: Deref<Target = T> + DerefMut + Unpin + 'a;
 
-    type SharedPtr<'a, T>: Deref<Target = T> + Unpin
-    where
-        T: ?Sized + 'a;
+    type SharedPtr<'a, T: 'a + ?Sized>: Clone + Deref<Target = T> + Unpin + 'a;
 
-    fn share<'a, T>(ptr: &Self::SharedPtr<'a, T>) -> Self::SharedPtr<'a, T>
-    where
-        T: ?Sized + 'a;
+    type Cell<T>;
 
-    type Borrowable<T>: ?Sized
-    where
-        T: ?Sized;
+    fn new_cell<T>(value: T) -> Self::Cell<T>;
 
-    type Borrowed<'a, T>: Deref<Target = T> + DerefMut + 'a
-    where
-        T: ?Sized + 'a;
-
-    fn borrow_mut<'a, T>(shared: &'a Self::Borrowable<T>) -> Self::Borrowed<'a, T>
-    where
-        T: ?Sized + 'a;
+    fn cell_replace<T>(cell: &Self::Cell<T>, other: T) -> T;
 }
 
-/// Future type that resolves to the value passed in by the caller when [`Gn::resume`] is called and
-/// execution is resumed.
-///
-/// This is the only future that may be polled by a [`Gn`].
-pub struct Interrupt<'slot, Y, R, F>
-where
-    F: GeneratorFlavor,
-    F::Borrowable<Option<Y>>: 'slot,
-    F::Borrowable<Option<R>>: 'slot,
-{
-    yielded_value: Option<Y>,
-    yield_slot: F::SharedPtr<'slot, F::Borrowable<Option<Y>>>,
-    resume_slot: F::SharedPtr<'slot, F::Borrowable<Option<R>>>,
+pub trait StackFlavor: GeneratorFlavor {}
+
+pub trait HeapFlavor: GeneratorFlavor {
+    fn new_shared<'a, T: 'a>(value: T) -> Self::SharedPtr<'a, T>;
 }
 
-impl<'slot, Y, R, F> Future for Interrupt<'slot, Y, R, F>
-where
-    Y: Unpin,
-    F: GeneratorFlavor,
-{
-    type Output = R;
+enum Slot<Y, R> {
+    Empty,
+    YieldValue(Y),
+    ResumeValue(R),
+}
 
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-
-        if let Some(yielded_value) = this.yielded_value.take() {
-            *F::borrow_mut(&this.yield_slot) = Some(yielded_value);
-            Poll::Pending
+impl<Y, R> Slot<Y, R> {
+    fn into_yield_value(self) -> Option<Y> {
+        if let Self::YieldValue(value) = self {
+            Some(value)
         } else {
-            let resume_value = F::borrow_mut(&this.resume_slot)
-                .take()
-                .expect("resume value set by generator executor");
-            Poll::Ready(resume_value)
+            None
         }
+    }
+
+    fn into_resume_value(self) -> Option<R> {
+        if let Self::ResumeValue(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct CellSlot<Y, R, F: GeneratorFlavor>(F::Cell<Slot<Y, R>>);
+
+impl<Y, R, F: GeneratorFlavor> Default for CellSlot<Y, R, F> {
+    fn default() -> Self {
+        Self(F::new_cell(Slot::Empty))
     }
 }
 
@@ -96,11 +95,23 @@ where
 pub struct Co<'slot, Y, R, F>
 where
     F: GeneratorFlavor,
-    F::Borrowable<Option<Y>>: 'slot,
-    F::Borrowable<Option<R>>: 'slot,
+    CellSlot<Y, R, F>: 'slot,
 {
-    yield_slot: F::SharedPtr<'slot, F::Borrowable<Option<Y>>>,
-    resume_slot: F::SharedPtr<'slot, F::Borrowable<Option<R>>>,
+    slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
+}
+
+impl<'slot, Y, R, F: HeapFlavor> Co<'slot, Y, R, F> {
+    pub fn new_heap(slot: CellSlot<Y, R, F>) -> Self {
+        Self {
+            slot: F::new_shared(slot),
+        }
+    }
+}
+
+impl<'slot, Y, R, F: StackFlavor> Co<'slot, Y, R, F> {
+    pub fn new_stacked(slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>) -> Self {
+        Self { slot }
+    }
 }
 
 impl<'slot, Y, R, F> Co<'slot, Y, R, F>
@@ -113,8 +124,7 @@ where
     pub fn suspend(&mut self, value: Y) -> Interrupt<'slot, Y, R, F> {
         Interrupt {
             yielded_value: Some(value),
-            yield_slot: F::share(&self.yield_slot),
-            resume_slot: F::share(&self.resume_slot),
+            slot: F::SharedPtr::clone(&self.slot),
         }
     }
 
@@ -146,8 +156,42 @@ where
     }
 }
 
+/// Future type that resolves to the value passed in by the caller when [`Gn::resume`] is called and
+/// execution is resumed.
+///
+/// This is the only future that may be polled by a [`Gn`].
+pub struct Interrupt<'slot, Y, R, F>
+where
+    F: GeneratorFlavor,
+    CellSlot<Y, R, F>: 'slot,
+{
+    yielded_value: Option<Y>,
+    slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
+}
+
+impl<'slot, Y, R, F> Future for Interrupt<'slot, Y, R, F>
+where
+    Y: Unpin,
+    F: GeneratorFlavor,
+{
+    type Output = R;
+
+    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+
+        if let Some(yielded_value) = this.yielded_value.take() {
+            F::cell_replace(&this.slot.0, Slot::YieldValue(yielded_value));
+            Poll::Pending
+        } else {
+            let resume_value = F::cell_replace(&this.slot.0, Slot::Empty)
+                .into_resume_value()
+                .expect("resume value set by generator executor");
+            Poll::Ready(resume_value)
+        }
+    }
+}
+
 /// The result of a generator execution.
-#[must_use]
 pub enum GnState<Y, O> {
     Suspended(Y),
     Completed(O),
@@ -177,20 +221,26 @@ where
 pub struct Gn<'gen, 'slot, Y, R, O, F>
 where
     O: 'gen,
-    F::Borrowable<Option<Y>>: 'slot,
-    F::Borrowable<Option<R>>: 'slot,
+    CellSlot<Y, R, F>: 'slot,
     F: GeneratorFlavor,
 {
-    yield_slot: F::SharedPtr<'slot, F::Borrowable<Option<Y>>>,
-    resume_slot: F::SharedPtr<'slot, F::Borrowable<Option<R>>>,
+    slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
     generator: Pin<F::UniquePtr<'gen, F::Fut<'gen, O>>>,
     started: bool,
 }
 
-impl<'gen, 'slot, Y, R, O, F> Gn<'gen, 'slot, Y, R, O, F>
-where
-    F: GeneratorFlavor,
-{
+impl<'gen, 'slot, Y, R, O, F: GeneratorFlavor> Gn<'gen, 'slot, Y, R, O, F> {
+    pub fn from_parts(
+        slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
+        generator: Pin<F::UniquePtr<'gen, F::Fut<'gen, O>>>,
+    ) -> Self {
+        Self {
+            slot,
+            generator,
+            started: false,
+        }
+    }
+
     /// Returns whether the generator was started or not
     pub fn started(&self) -> bool {
         self.started
@@ -213,7 +263,7 @@ where
             "generator must be started before it can be resumed"
         );
 
-        *F::borrow_mut(&self.resume_slot) = Some(value);
+        F::cell_replace(&self.slot.0, Slot::ResumeValue(value));
 
         self.step()
     }
@@ -221,8 +271,8 @@ where
     fn step(&mut self) -> GnState<Y, O> {
         match execute_one_step(self.generator.as_mut()) {
             None => {
-                let value = F::borrow_mut(&self.yield_slot)
-                    .take()
+                let value = F::cell_replace(&self.slot.0, Slot::Empty)
+                    .into_yield_value()
                     .expect("yielded value set by the `await`ed `Interrupt`");
                 GnState::Suspended(value)
             }
