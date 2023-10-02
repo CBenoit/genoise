@@ -13,10 +13,20 @@ include = ["src/**/*", "README.md", "CHANGELOG.md", "LICENSE-*"]
 keywords = ["generator", "yield", "coroutine", "state-machine", "no-std"]
 categories = ["rust-patterns", "no-std", "no-std::no-alloc"]
 publish = true
+autotests = false # all tests are in `genoise_tests`
 
 [features]
 default = ["alloc"]
 alloc = []
+
+[lib]
+doctest = true
+test = false # no unit tests in library, test everything in `genoise_tests`
+
+[[test]]
+name = "genoise_tests"
+path = "tests/main.rs"
+harness = true
 
 [package.metadata.docs.rs]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
