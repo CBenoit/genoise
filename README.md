@@ -10,7 +10,7 @@ genoise
 
 ## What is `genoise`?
 
-`genoise` implements [generators (a weaker, special case of coroutines)][generator] for stable Rust. 
+`genoise` implements [generators][generator] (a weaker, special case of coroutines) for stable Rust. 
 Instead of using `#![feature(generators, generator_trait)]` and the `yield` keyword, ["extra-unstable"
 features][unstable-generators] in the Rust compiler, `async`/`await` syntax is used.
 
@@ -47,6 +47,7 @@ async fn my_generator<'a>(mut co: Co<'_, usize, bool>, input: &'a str) -> &'a st
 }
 
 let argument = "1234567890";
+
 let mut generator = Gn::new(|co| my_generator(co, argument));
 
 // A generator does nothing when created, you need to `.start()` it first
@@ -63,18 +64,19 @@ assert!(matches!(generator.resume(false), GnState::Completed("12345678")));
 ## Why `genoise`?
 
 - Low maintenance: `genoise` is a zero-dependency crate. There is no need to release a new version
-  of `genoise` just for transitive dependencies.
+  of `genoise` solely for transitive dependencies.
 - Lightweight: `genoise` consists of only a few hundred lines of code and does not rely on
   procedural macros.
-- Doesn’t attempt to use reserved keywords: There are no `yield_` or `r#yield` in its API.
-- Simple: You can read and grok its source code in just a few minutes.
-  The most challenging part is [`GeneratorFlavor`](crate::GeneratorFlavor) which relies on GATs (Generic Associated Types).
-- Continuation arguments and completion values.
-- Allocation-free generators.
+- Doesn’t attempt to use reserved keywords: there are no `yield_` or `r#yield` in its API.
+- Concise and simple: there is more example and test code than actual library code.
+  You can read and grok its source code in just a few minutes.
+  The most challenging part is [`GeneratorFlavor`](crate::GeneratorFlavor), which relies on GATs (Generic Associated Types).
+- Supports continuation arguments and completion values.
+- Provides allocation-free generators at user’s option.
 - Genericity over the [`GeneratorFlavor`](crate::GeneratorFlavor): Write once, use everywhere.
 - No standard library: `genoise` is a no-std crate, and the `alloc` feature can be disabled.
-- Not a concurrency framework nor an async runtime: `genoise` does not try to replace `tokio` or
-  `smol`, and there is no platform-specific code.
+- Not a concurrency framework or async runtime: `genoise` does not aim to replace `tokio` or
+  `smol`, and it does not contain platform-specific code.
 
 ## Why not `genoise`?
 
@@ -85,18 +87,17 @@ assert!(matches!(generator.resume(false), GnState::Completed("12345678")));
 
 ## Flavor comparison
 
-|                             | [`local::StackedGn`] | [`local::Gn`] | [`sync::StackedGn`] | [`sync::Gn`] |
-|-----------------------------|----------------------|---------------|---------------------|--------------|
-| Allocations per instance    | 0                    | 3             | 0                   | 3            |
-| Can be returned             | No                   | Yes           | No                  | Yes          |
-| Thread-safe (`Sync + Send`) | No                   | No            | Yes                 | yes          |
+|                             | [`local::StackGn`] | [`local::Gn`] | [`sync::StackGn`] | [`sync::Gn`] |
+|-----------------------------|--------------------|---------------|-------------------|--------------|
+| Allocations per instance    | 0                  | 2             | 0                 | 2            |
+| Can be returned             | No                 | Yes           | No                | Yes          |
+| Thread-safe (`Sync + Send`) | No                 | No            | Yes               | yes          |
 
-`local` is used like in thread-"local".
+"local" here is used like in thread-"local".
 
-Constructing a heap-flavored generator requires three allocations:
+Constructing a heap-flavored generator requires two allocations:
 
-- A memory slot for the yield value
-- A memory slot for the resume value
+- A memory slot to share the yield and resume values
 - A memory slot for the `Future`-based state machine
 
 Stack-flavored generators are relying on "[local pinning][local-pinning]" for the underlying
@@ -116,6 +117,95 @@ Safety blocks are properly documented.
 
 - noop RawWaker
 - SyncRefCell (~= kind of spinlock but without spinning)
+
+## Allocation-free example
+
+TODO: elaborate this section
+
+```rust
+use genoise::local::{StackGn, StackCo, let_gen};
+use genoise::GnState;
+
+async fn my_generator<'a>(mut co: StackCo<'_, usize, bool>, input: &'a str) -> &'a str {
+    let mut trimmed = input;
+
+    while co.suspend(trimmed.len()).await {
+        trimmed = &trimmed[..trimmed.len() - 1];
+    }
+
+    trimmed
+}
+
+let argument = "1234567890";
+
+let_gen!(generator, co, { my_generator(co, argument) }); // <- let_gen! helper macro
+
+assert!(matches!(generator.start(), GnState::Suspended(10)));
+assert!(matches!(generator.resume(true), GnState::Suspended(9)));
+assert!(matches!(generator.resume(false), GnState::Completed("123456789")));
+```
+
+## Flavor-agnostic example
+
+TODO: elaborate this section
+
+```rust
+use genoise::{local, sync};
+use genoise::{GnState, Co, GeneratorFlavor};
+
+async fn my_generator<'a, F>(mut co: Co<'_, usize, bool, F>, input: &'a str) -> &'a str
+where
+    F: GeneratorFlavor,
+{
+    let mut trimmed = input;
+
+    while co.suspend(trimmed.len()).await {
+        trimmed = &trimmed[..trimmed.len() - 1];
+    }
+
+    trimmed
+}
+
+let argument = "1234567890";
+
+{
+    // Local stack-flavored
+    local::let_gen!(generator, co, { my_generator(co, argument) });
+    assert!(matches!(generator.start(), GnState::Suspended(10)));
+    assert!(matches!(generator.resume(false), GnState::Completed("1234567890")));
+}
+
+{
+    // Local heap-flavored
+    let mut generator = local::Gn::new(|co| my_generator(co, argument));
+    assert!(matches!(generator.start(), GnState::Suspended(10)));
+    assert!(matches!(generator.resume(false), GnState::Completed("1234567890")));
+}
+
+{
+    // Thread-safe stack-flavored
+    sync::let_gen!(generator, co, { my_generator(co, argument) });
+
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            assert!(matches!(generator.start(), GnState::Suspended(10)));
+            assert!(matches!(generator.resume(false), GnState::Completed("1234567890")));
+        });
+    });
+}
+
+{
+    // Thread-safe heap-flavored
+    let mut generator = sync::Gn::new(|co| my_generator(co, argument));
+
+    let handle = std::thread::spawn(move || {
+        assert!(matches!(generator.start(), GnState::Suspended(10)));
+        assert!(matches!(generator.resume(false), GnState::Completed("1234567890")));
+    });
+
+    handle.join().unwrap();
+}
+```
 
 ## Relation with `Iterator`s
 
