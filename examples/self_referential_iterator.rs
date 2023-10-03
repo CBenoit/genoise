@@ -20,7 +20,7 @@ where
 // Thin wrapper around a generator
 pub struct DeepIterator<'a, T> {
     // Implementation detail
-    inner: local::Gn<'a, 'a, &'a T, (), ()>,
+    inner: local::Gn<'a, &'a T, (), ()>,
 }
 
 impl<'a, T> DeepIterator<'a, T> {
@@ -33,7 +33,7 @@ impl<'a, T> DeepIterator<'a, T> {
 impl<'a, T> IntoIterator for DeepIterator<'a, T> {
     type Item = &'a T;
 
-    type IntoIter = local::Gn<'a, 'a, &'a T, (), ()>;
+    type IntoIter = local::Gn<'a, &'a T, (), ()>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner

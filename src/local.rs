@@ -44,14 +44,14 @@ mod stacked {
 
     pub type StackCellSlot<Y, R> = crate::CellSlot<Y, R, StackLocal>;
 
-    pub type StackCo<'slot, Y, R> = crate::Co<'slot, Y, R, StackLocal>;
+    pub type StackCo<'a, Y, R> = crate::Co<'a, Y, R, StackLocal>;
 
-    pub type StackGn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, StackLocal>;
+    pub type StackGn<'a, Y, R, O> = crate::Gn<'a, Y, R, O, StackLocal>;
 
-    impl<'gen, 'slot, Y, R, O> StackGn<'gen, 'slot, Y, R, O> {
+    impl<'a, Y, R, O> StackGn<'a, Y, R, O> {
         pub fn new(
-            slot: &'slot StackCellSlot<Y, R>,
-            generator: Pin<&'gen mut (dyn Future<Output = O> + 'gen)>,
+            slot: &'a StackCellSlot<Y, R>,
+            generator: Pin<&'a mut (dyn Future<Output = O> + 'a)>,
         ) -> Self {
             Self {
                 slot,
@@ -104,7 +104,7 @@ mod heap {
 
     /// Thread local generator controller
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-    pub type Co<'slot, Y, R> = crate::Co<'slot, Y, R, HeapLocal>;
+    pub type Co<'a, Y, R> = crate::Co<'a, Y, R, HeapLocal>;
 
     /// Thread local generator controller holding items with 'static lifetime only
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -112,14 +112,14 @@ mod heap {
 
     /// Thread local generator
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-    pub type Gn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, HeapLocal>;
+    pub type Gn<'a, Y, R, O> = crate::Gn<'a, Y, R, O, HeapLocal>;
 
-    impl<'gen, 'slot, Y, R, O> Gn<'gen, 'slot, Y, R, O> {
+    impl<'a, Y, R, O> Gn<'a, Y, R, O> {
         #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
         pub fn new<Producer, Generator>(producer: Producer) -> Self
         where
-            Producer: FnOnce(Co<'slot, Y, R>) -> Generator,
-            Generator: Future<Output = O> + 'gen,
+            Producer: FnOnce(Co<'a, Y, R>) -> Generator,
+            Generator: Future<Output = O> + 'a,
         {
             let co = Co::new_heap(CellSlot::default());
             let slots = Rc::clone(&co.slot);
@@ -129,5 +129,5 @@ mod heap {
     }
 
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-    pub type StaticGn<Y, R, O> = crate::Gn<'static, 'static, Y, R, O, HeapLocal>;
+    pub type StaticGn<Y, R, O> = crate::Gn<'static, Y, R, O, HeapLocal>;
 }

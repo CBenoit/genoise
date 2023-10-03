@@ -2,6 +2,7 @@
 #![warn(clippy::undocumented_unsafe_blocks)]
 #![warn(clippy::multiple_unsafe_ops_per_block)]
 #![warn(clippy::semicolon_outside_block)]
+#![warn(elided_lifetimes_in_paths)]
 #![warn(unreachable_pub)]
 // TODO: #![warn(missing_docs)]
 #![no_std]
@@ -24,11 +25,8 @@ macro_rules! let_gen {
         let slot = $crate::CellSlot::default();
         let $co = $crate::Co::<_, _, $flavor>::new_stacked(&slot);
         let fut = ::core::pin::pin!($fut_init);
-        // TODO: check what happen when mutability is not used (warning?)
-        let mut $gn = $crate::Gn::<'_, '_, _, _, _, $flavor>::from_parts(
-            &slot,
-            fut as ::core::pin::Pin<&mut _>,
-        );
+        let mut $gn =
+            $crate::Gn::<'_, _, _, _, $flavor>::from_parts(&slot, fut as ::core::pin::Pin<&mut _>);
     };
     ($flavor:ty, $gn:ident, $fut_init:path) => {
         $crate::len_gen!($flavor, $gn, |co| { $fut_init(co) })
@@ -95,15 +93,15 @@ impl<Y, R, F: GeneratorFlavor> Default for CellSlot<Y, R, F> {
 /// Used to suspend execution of a generator
 ///
 /// "Co" stands for either _controller_ or _coroutine_.
-pub struct Co<'slot, Y, R, F>
+pub struct Co<'a, Y, R, F>
 where
     F: GeneratorFlavor,
-    CellSlot<Y, R, F>: 'slot,
+    CellSlot<Y, R, F>: 'a,
 {
-    slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
+    slot: F::SharedPtr<'a, CellSlot<Y, R, F>>,
 }
 
-impl<'slot, Y, R, F: HeapFlavor> Co<'slot, Y, R, F> {
+impl<'a, Y, R, F: HeapFlavor> Co<'a, Y, R, F> {
     pub fn new_heap(slot: CellSlot<Y, R, F>) -> Self {
         Self {
             slot: F::new_shared(slot),
@@ -111,20 +109,20 @@ impl<'slot, Y, R, F: HeapFlavor> Co<'slot, Y, R, F> {
     }
 }
 
-impl<'slot, Y, R, F: StackFlavor> Co<'slot, Y, R, F> {
-    pub fn new_stacked(slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>) -> Self {
+impl<'a, Y, R, F: StackFlavor> Co<'a, Y, R, F> {
+    pub fn new_stacked(slot: F::SharedPtr<'a, CellSlot<Y, R, F>>) -> Self {
         Self { slot }
     }
 }
 
-impl<'slot, Y, R, F> Co<'slot, Y, R, F>
+impl<'a, Y, R, F> Co<'a, Y, R, F>
 where
     F: GeneratorFlavor,
-    Y: Unpin + 'slot,
-    R: 'slot,
+    Y: Unpin + 'a,
+    R: 'a,
 {
     /// Suspends the execution of the generator, yielding an intermediate value
-    pub fn suspend(&mut self, value: Y) -> Interrupt<'slot, Y, R, F> {
+    pub fn suspend(&mut self, value: Y) -> Interrupt<'a, Y, R, F> {
         Interrupt {
             yielded_value: Some(value),
             slot: F::SharedPtr::clone(&self.slot),
@@ -139,10 +137,7 @@ where
     ///
     /// The yield and resume types of the generator must be the same as this controller, but the
     /// [flavor](GeneratorFlavor) may differ.
-    pub async fn suspend_from<'gen, O, F2>(
-        &mut self,
-        mut generator: Gn<'gen, 'slot, Y, R, O, F2>,
-    ) -> O
+    pub async fn suspend_from<O, F2>(&mut self, mut generator: Gn<'a, Y, R, O, F2>) -> O
     where
         F2: GeneratorFlavor,
     {
@@ -163,16 +158,16 @@ where
 /// execution is resumed.
 ///
 /// This is the only future that may be polled by a [`Gn`].
-pub struct Interrupt<'slot, Y, R, F>
+pub struct Interrupt<'a, Y, R, F>
 where
     F: GeneratorFlavor,
-    CellSlot<Y, R, F>: 'slot,
+    CellSlot<Y, R, F>: 'a,
 {
     yielded_value: Option<Y>,
-    slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
+    slot: F::SharedPtr<'a, CellSlot<Y, R, F>>,
 }
 
-impl<'slot, Y, R, F> Future for Interrupt<'slot, Y, R, F>
+impl<'a, Y, R, F> Future for Interrupt<'a, Y, R, F>
 where
     Y: Unpin,
     F: GeneratorFlavor,
@@ -221,21 +216,21 @@ where
 /// - Resume type: Each time a generator is resumed, a value is passed in by the caller.
 /// - Output type: When a generator completes, one final value is returned.
 #[must_use = "generators do nothing unless you `.start()` or `.resume(…)` them"]
-pub struct Gn<'gen, 'slot, Y, R, O, F>
+pub struct Gn<'a, Y, R, O, F>
 where
-    O: 'gen,
-    CellSlot<Y, R, F>: 'slot,
+    O: 'a,
+    CellSlot<Y, R, F>: 'a,
     F: GeneratorFlavor,
 {
-    slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
-    generator: Pin<F::UniquePtr<'gen, F::Fut<'gen, O>>>,
+    slot: F::SharedPtr<'a, CellSlot<Y, R, F>>,
+    generator: Pin<F::UniquePtr<'a, F::Fut<'a, O>>>,
     started: bool,
 }
 
-impl<'gen, 'slot, Y, R, O, F: GeneratorFlavor> Gn<'gen, 'slot, Y, R, O, F> {
+impl<'a, Y, R, O, F: GeneratorFlavor> Gn<'a, Y, R, O, F> {
     pub fn from_parts(
-        slot: F::SharedPtr<'slot, CellSlot<Y, R, F>>,
-        generator: Pin<F::UniquePtr<'gen, F::Fut<'gen, O>>>,
+        slot: F::SharedPtr<'a, CellSlot<Y, R, F>>,
+        generator: Pin<F::UniquePtr<'a, F::Fut<'a, O>>>,
     ) -> Self {
         Self {
             slot,
@@ -317,7 +312,7 @@ fn execute_one_step<F: Future + ?Sized>(generator: Pin<&mut F>) -> Option<F::Out
     }
 }
 
-impl<'gen, 'slot, Y, F> Iterator for Gn<'gen, 'slot, Y, (), (), F>
+impl<'a, Y, F> Iterator for Gn<'a, Y, (), (), F>
 where
     F: GeneratorFlavor,
 {

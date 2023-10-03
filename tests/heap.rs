@@ -1,6 +1,6 @@
 use genoise::{local, sync, Co, GeneratorFlavor, Gn, GnState};
 
-fn check_generator<F: GeneratorFlavor>(g: &mut Gn<'_, '_, String, usize, bool, F>) {
+fn check_generator<F: GeneratorFlavor>(g: &mut Gn<'_, String, usize, bool, F>) {
     if let GnState::Suspended(value) = g.start() {
         assert!(matches!(g.resume(value.len()), GnState::Completed(true)));
     } else {
@@ -73,7 +73,7 @@ async fn generator_yielding_ref<'a, F: GeneratorFlavor>(
     len == input.len()
 }
 
-fn check_generator_yielding_ref<F: GeneratorFlavor>(g: &mut Gn<'_, '_, &str, usize, bool, F>) {
+fn check_generator_yielding_ref<F: GeneratorFlavor>(g: &mut Gn<'_, &str, usize, bool, F>) {
     if let GnState::Suspended(value) = g.start() {
         assert!(matches!(g.resume(value.len()), GnState::Completed(true)));
     } else {
@@ -95,7 +95,7 @@ fn check_generator_yielding_ref<F: GeneratorFlavor>(g: &mut Gn<'_, '_, &str, usi
 
 #[test]
 fn check_local_owned_gn_yielding_ref_can_be_returned() {
-    fn produce_a_generator(input: &str) -> local::Gn<'_, '_, &str, usize, bool> {
+    fn produce_a_generator(input: &str) -> local::Gn<'_, &str, usize, bool> {
         local::Gn::new(|co| generator_yielding_ref(co, input))
     }
 
@@ -111,7 +111,7 @@ fn check_hardcoded_local_owned_gn() {
         len == input.len()
     }
 
-    fn produce_a_generator(input: &str) -> local::Gn<'_, '_, &str, usize, bool> {
+    fn produce_a_generator(input: &str) -> local::Gn<'_, &str, usize, bool> {
         local::Gn::new(|co| local_generator(co, input))
     }
 

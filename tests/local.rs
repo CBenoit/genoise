@@ -20,10 +20,10 @@ macro_rules! assert_not_send_nor_sync {
 
 #[test]
 fn check_heap_gn_is_not_send_nor_sync() {
-    assert_not_send_nor_sync!(Gn<'_, '_, (), (), ()>);
+    assert_not_send_nor_sync!(Gn<'_, (), (), ()>);
 }
 
 #[test]
 fn check_stacked_gn_is_not_send_nor_sync() {
-    assert_not_send_nor_sync!(StackGn<'_, '_, (), (), ()>);
+    assert_not_send_nor_sync!(StackGn<'_, (), (), ()>);
 }

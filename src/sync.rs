@@ -47,14 +47,14 @@ mod stack {
 
     pub type StackCellSlot<Y, R> = crate::CellSlot<Y, R, StackSync>;
 
-    pub type StackCo<'slot, Y, R> = crate::Co<'slot, Y, R, StackSync>;
+    pub type StackCo<'a, Y, R> = crate::Co<'a, Y, R, StackSync>;
 
-    pub type StackGn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, StackSync>;
+    pub type StackGn<'a, Y, R, O> = crate::Gn<'a, Y, R, O, StackSync>;
 
-    impl<'gen, 'slot, Y, R, O> StackGn<'gen, 'slot, Y, R, O> {
+    impl<'a, Y, R, O> StackGn<'a, Y, R, O> {
         pub fn new(
-            slot: &'slot StackCellSlot<Y, R>,
-            generator: Pin<&'gen mut (dyn Future<Output = O> + Send + Sync + 'gen)>,
+            slot: &'a StackCellSlot<Y, R>,
+            generator: Pin<&'a mut (dyn Future<Output = O> + Send + Sync + 'a)>,
         ) -> Self {
             Self {
                 slot,
@@ -108,7 +108,7 @@ mod heap {
 
     /// Thread safe generator controller
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-    pub type Co<'slot, Y, R> = crate::Co<'slot, Y, R, HeapSync>;
+    pub type Co<'a, Y, R> = crate::Co<'a, Y, R, HeapSync>;
 
     /// Thread safe generator controller holding items with 'static lifetime only
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -116,14 +116,14 @@ mod heap {
 
     /// Thread safe generator
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-    pub type Gn<'gen, 'slot, Y, R, O> = crate::Gn<'gen, 'slot, Y, R, O, HeapSync>;
+    pub type Gn<'a, Y, R, O> = crate::Gn<'a, Y, R, O, HeapSync>;
 
-    impl<'gen, 'slot, Y, R, O> Gn<'gen, 'slot, Y, R, O> {
+    impl<'a, Y, R, O> Gn<'a, Y, R, O> {
         #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
         pub fn new<Producer, Generator>(producer: Producer) -> Self
         where
-            Producer: FnOnce(Co<'slot, Y, R>) -> Generator,
-            Generator: Future<Output = O> + Send + Sync + 'gen,
+            Producer: FnOnce(Co<'a, Y, R>) -> Generator,
+            Generator: Future<Output = O> + Send + Sync + 'a,
         {
             let co = Co::new_heap(CellSlot::default());
             let slots = Arc::clone(&co.slot);
@@ -133,7 +133,7 @@ mod heap {
     }
 
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-    pub type StaticGn<Y, R, O> = crate::Gn<'static, 'static, Y, R, O, HeapSync>;
+    pub type StaticGn<Y, R, O> = crate::Gn<'static, Y, R, O, HeapSync>;
 }
 
 // NOTE: This module is private on purpose. The `SyncRefCell` type is not part of the public API.
