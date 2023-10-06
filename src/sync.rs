@@ -25,7 +25,7 @@ mod stack {
     use super::cell::SyncRefCell;
 
     impl GeneratorFlavor for StackSync {
-        type Fut<'a, T: 'a> = dyn Future<Output = T> + Sync + Send + 'a;
+        type Fut<'a, T: 'a> = dyn Future<Output = T> + Send + 'a;
 
         type UniquePtr<'a, T: ?Sized + 'a> = &'a mut T;
 
@@ -54,7 +54,7 @@ mod stack {
     impl<'a, Y, R, O> StackGn<'a, Y, R, O> {
         pub fn new(
             slot: &'a StackCellSlot<Y, R>,
-            generator: Pin<&'a mut (dyn Future<Output = O> + Send + Sync + 'a)>,
+            generator: Pin<&'a mut (dyn Future<Output = O> + Send + 'a)>,
         ) -> Self {
             Self {
                 slot,
@@ -82,7 +82,7 @@ mod heap {
     pub struct HeapSync;
 
     impl GeneratorFlavor for HeapSync {
-        type Fut<'a, T: 'a> = dyn Future<Output = T> + Send + Sync + 'a;
+        type Fut<'a, T: 'a> = dyn Future<Output = T> + Send + 'a;
 
         type UniquePtr<'a, T: ?Sized + 'a> = Box<T>;
 
@@ -123,7 +123,7 @@ mod heap {
         pub fn new<Producer, Generator>(producer: Producer) -> Self
         where
             Producer: FnOnce(Co<'a, Y, R>) -> Generator,
-            Generator: Future<Output = O> + Send + Sync + 'a,
+            Generator: Future<Output = O> + Send + 'a,
         {
             let co = Co::new_heap(CellSlot::default());
             let slots = Arc::clone(&co.slot);

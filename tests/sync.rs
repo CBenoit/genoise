@@ -3,7 +3,7 @@ use genoise::sync::{Gn, StackGn};
 macro_rules! assert_send_and_sync {
     ($type:ty) => {
         const _: fn() = || {
-            fn assert_impl<T: Send + Sync>() {}
+            fn assert_impl<T: Send>() {}
             assert_impl::<$type>();
         };
     };

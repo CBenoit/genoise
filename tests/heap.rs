@@ -82,16 +82,16 @@ fn check_generator_yielding_ref<F: GeneratorFlavor>(g: &mut Gn<'_, &str, usize, 
 }
 
 // FIXME: higher-ranked lifetime error
-// #[test]
-// fn check_sync_owned_gn_yielding_ref_can_be_returned() {
-//     fn produce_a_generator(input: &str) -> sync::Gn<'_, '_, &str, usize, bool> {
-//         sync::Gn::new(|co| generator_yielding_ref(co, input))
-//     }
+#[test]
+fn check_sync_owned_gn_yielding_ref_can_be_returned() {
+    fn produce_a_generator(input: &str) -> sync::Gn<'_, &str, usize, bool> {
+        sync::Gn::new(|co| generator_yielding_ref(co, input))
+    }
 
-//     let input = String::from("hello");
-//     let mut g = produce_a_generator(&input);
-//     check_generator_yielding_ref(&mut g);
-// }
+    let input = String::from("hello");
+    let mut g = produce_a_generator(&input);
+    check_generator_yielding_ref(&mut g);
+}
 
 #[test]
 fn check_local_owned_gn_yielding_ref_can_be_returned() {
