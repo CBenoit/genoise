@@ -42,8 +42,10 @@ impl<'a, T> IntoIterator for DeepIterator<'a, T> {
 
 fn main() {
     let it = DeepIterator::new(&[&[1, 2, 3], &[4, 5, 6], &[7, 8, 9]]);
+    let expected = &[1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-    for value in it {
-        println!("{value}");
+    for (expected, actual) in expected.iter().zip(it) {
+        assert_eq!(actual, expected);
+        println!("{actual}");
     }
 }

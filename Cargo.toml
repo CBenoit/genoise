@@ -35,7 +35,11 @@ all-features = true
 [[example]]
 name = "state_machine"
 doc-scrape-examples = true
+test = true
+harness = false
 
 [[example]]
 name = "self_referential_iterator"
 doc-scrape-examples = true
+test = true
+harness = false
