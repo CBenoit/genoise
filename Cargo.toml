@@ -43,3 +43,9 @@ name = "self_referential_iterator"
 doc-scrape-examples = true
 test = true
 harness = false
+
+[[example]]
+name = "suspend_from"
+doc-scrape-examples = true
+test = true
+harness = false
