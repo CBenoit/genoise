@@ -11,6 +11,7 @@ macro_rules! on_error {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn check_formatting() {
     let output = Command::new("cargo")
         .arg("fmt")
@@ -26,6 +27,7 @@ fn check_formatting() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn check_doc() {
     let output = Command::new("cargo")
         .arg("doc")
@@ -39,6 +41,7 @@ fn check_doc() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn check_lints() {
     let output = Command::new("cargo")
         .arg("clippy")
