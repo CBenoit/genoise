@@ -1,23 +1,44 @@
-use library::{combine_both, Event, UserResponse};
+use library::{combine_both, do_something, do_something_else, Event, UserResponse};
 
 const SPECIAL_CASE: &str = "rust-lang.org";
 
 fn main() {
-    let test_cases = [(SPECIAL_CASE, 6), ("fallback.ninja", 1000)];
+    {
+        println!("Calling `do_something` with {:?}", SPECIAL_CASE);
+        let generator = do_something(SPECIAL_CASE);
+        println!("Drive the generator");
+        let out = drive_generator(generator, SPECIAL_CASE, 3);
+        assert_eq!(out, 3);
+    }
 
-    for (input, expected_out) in test_cases {
-        println!("Calling with {input:?}");
-        let out = call_and_drive_combine_both(input);
+    {
+        println!("Calling `do_something_else`");
+        let generator = do_something_else();
+        println!("Drive the generator");
+        let out = drive_generator(generator, "never exercised", 500);
+        assert_eq!(out, 500);
+    }
+
+    let cases = [(SPECIAL_CASE, 3, 6), ("fallback.ninja", 500, 1000)];
+
+    for (input, expected_payload_len, expected_out) in cases {
+        println!("Calling `combine_both` with {input:?}");
+        let generator = combine_both(input);
+        println!("Drive the generator");
+        let out = drive_generator(generator, input, expected_payload_len);
         assert_eq!(out, expected_out);
     }
 }
 
-fn call_and_drive_combine_both(input: &str) -> u32 {
+fn drive_generator<F>(
+    mut generator: genoise::Gn<'_, '_, Event<'_>, UserResponse, u32, F>,
+    expected_url: &str,
+    expected_payload_len: usize,
+) -> u32
+where
+    F: genoise::GeneratorFlavor,
+{
     use genoise::GnState;
-
-    let mut generator = combine_both(input);
-
-    println!("Drive the generator");
 
     // Start the generator
     let mut state = generator.start();
@@ -26,14 +47,15 @@ fn call_and_drive_combine_both(input: &str) -> u32 {
         let response = match state {
             // The generator is suspended, handle the yielded value
             GnState::Suspended(event) => {
-                // How the events are actually handled is up to the caller (could perform I/O with or without async)
+                // How the events are actually handled is up to the caller
+                // (could perform I/O with or without async)
                 match event {
                     Event::HttpRequest { url } => {
-                        assert_eq!(url, input);
+                        assert_eq!(url, expected_url);
                         UserResponse::Payload(vec![1, 2, 3])
                     }
                     Event::PayloadLen(len) => {
-                        assert!(len == 3 || len == 500);
+                        assert_eq!(len, expected_payload_len);
                         UserResponse::SomeValue(u32::try_from(len).unwrap())
                     }
                 }
