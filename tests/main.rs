@@ -1,4 +1,5 @@
 mod borrow;
+mod compiletest;
 mod heap;
 mod local;
 mod stack;

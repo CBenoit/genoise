@@ -1,0 +1,74 @@
+error[E0277]: `Cell<genoise::Slot<(), ()>>` cannot be shared between threads safely
+    |
+    |           s.spawn(|| {
+    |  ___________-----_^
+    | |           |
+    | |           required by a bound introduced by this call
+    | |             assert!(!generator.started());
+    | |             assert!(matches!(generator.start(), GnState::Completed(())));
+    | |         });
+    | |_________^ `Cell<genoise::Slot<(), ()>>` cannot be shared between threads safely
+    |
+    = help: within `CellSlot<(), (), StackLocal>`, the trait `Sync` is not implemented for `Cell<genoise::Slot<(), ()>>`
+    = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock`
+note: required because it appears within the type `CellSlot<(), (), StackLocal>`
+    |
+    | pub struct CellSlot<Y, R, F: GeneratorFlavor>(F::Cell<Slot<Y, R>>);
+    |            ^^^^^^^^
+    = note: required for `&CellSlot<(), (), StackLocal>` to implement `Send`
+note: required because it appears within the type `Gn<'_, '_, (), (), (), StackLocal>`
+    |
+    | pub struct Gn<'gen, 'slot, Y, R, O, F>
+    |            ^^
+    = note: required because it appears within the type `&mut Gn<'_, '_, (), (), (), StackLocal>`
+note: required because it's used within this closure
+    |
+    |         s.spawn(|| {
+    |                 ^^
+note: required by a bound in `Scope::<'scope, 'env>::spawn`
+    |
+    |     pub fn spawn<F, T>(&'scope self, f: F) -> ScopedJoinHandle<'scope, T>
+    |            ----- required by a bound in this associated function
+    |     where
+    |         F: FnOnce() -> T + Send + 'scope,
+    |                            ^^^^ required by this bound in `Scope::<'scope, 'env>::spawn`
+
+error[E0277]: `dyn Future<Output = ()>` cannot be sent between threads safely
+    |
+    |           s.spawn(|| {
+    |             ----- ^-
+    |             |     |
+    |  ___________|_____within this `[closure@./tests/misuse/local-stack-flavor-is-non-send.rs:9:17: 9:19]`
+    | |           |
+    | |           required by a bound introduced by this call
+    | |             assert!(!generator.started());
+    | |             assert!(matches!(generator.start(), GnState::Completed(())));
+    | |         });
+    | |_________^ `dyn Future<Output = ()>` cannot be sent between threads safely
+    |
+    = help: within `[closure@./tests/misuse/local-stack-flavor-is-non-send.rs:9:17: 9:19]`, the trait `Send` is not implemented for `dyn Future<Output = ()>`
+    = note: required because it appears within the type `&mut dyn Future<Output = ()>`
+note: required because it appears within the type `Pin<&mut dyn Future<Output = ()>>`
+    |
+    | pub struct Pin<P> {
+    |            ^^^
+note: required because it appears within the type `Gn<'_, '_, (), (), (), StackLocal>`
+    |
+    | pub struct Gn<'gen, 'slot, Y, R, O, F>
+    |            ^^
+    = note: required because it appears within the type `&mut Gn<'_, '_, (), (), (), StackLocal>`
+note: required because it's used within this closure
+    |
+    |         s.spawn(|| {
+    |                 ^^
+note: required by a bound in `Scope::<'scope, 'env>::spawn`
+    |
+    |     pub fn spawn<F, T>(&'scope self, f: F) -> ScopedJoinHandle<'scope, T>
+    |            ----- required by a bound in this associated function
+    |     where
+    |         F: FnOnce() -> T + Send + 'scope,
+    |                            ^^^^ required by this bound in `Scope::<'scope, 'env>::spawn`
+
+error: aborting due to 2 previous errors
+
+For more information about this error, try `rustc --explain E0277`.
